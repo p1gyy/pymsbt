@@ -1,4 +1,4 @@
-# pysmbt
+# pymsbt
 A simple python library for reading and editing .msbt (Message Studio Binary Text) files, which is a file format created by Nintendo for use in their games. These files are used for localization and displaying text to the player. This library was created for batch-editing or reading msbt files to mod Nintendo games, such as with a translator api or regex expression. This could be used to create language translations that aren't officialy supported by the base game.
 
 ## Installation
