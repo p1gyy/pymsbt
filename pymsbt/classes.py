@@ -1,5 +1,13 @@
 import struct
 
+def formatList(texts):
+    string = """"""
+    for text in texts:
+        string += str(text)
+        string += '\n       '
+
+    return string
+
 class MSBTHeader:
     def __init__(self, data):
 
@@ -17,16 +25,22 @@ class MSBTHeader:
         print(f"MSBT Header: Magic={self.magic}, Byte order={self.byte_order} Version={self.version}, SectionCount={self.section_count}, FileSize={self.file_size}")
 
     def __str__(self):
-        return (f"Magic: {self.magic}, Byte Order: {self.byte_order}, Version: {self.version}, Section Count: {self.section_count}, File Size: {self.file_size}")
+        return (f"({self.magic}: byte_order: {self.byte_order}, version: {self.version}, section_count: {self.section_count}, file_size: {self.file_size})")
 
 class MSBTSection:
     # msbt section header containing signature (magic) and table size
     def __init__(self, data, offset):
         self.encoded_signature, self.table_size = struct.unpack_from("<4sI", data, offset)
         self.signature = self.encoded_signature.decode('ascii')
+        self.bytes = None
+
+    def storeBytes(self, data, offset, next_section):
+        self.bytes = data[offset:next_section]
 
     def __str__(self):
-        return f"MSBT Section:  Signature: {self.signature}  Table Size: {self.table_size}"
+        return f"(signature: {self.signature}  table_size: {self.table_size})"
+    def __repr__(self): # this needs to be here for print to work if in a list 
+        return self.__str__()
 
 class LBL1Section:
     def __init__(self, data, section_offset, table_size):
@@ -73,7 +87,8 @@ class LBL1Section:
             self.labels.append(MSBTLabel(label, str_len, index))
 
     def __str__(self):
-        return (f"Magic: {self.magic}, Offset Count: {self.offset_count}, Labels: {[str(label) for label in self.labels]}, ")
+        return (f"""(magic: {self.magic} offset_count: {self.offset_count},
+    labels: {formatList(self.labels)}""")
 
 class TXT2Section:
     def __init__(self, data, section_offset, table_size):
@@ -106,9 +121,9 @@ class TXT2Section:
                 text_command = TextCommand(data, offset)
                 if len(text) > 0:
                     # if there's already data in text variable, create component before adding text command
-                    components.append({'type': 'text', 'data': text})
+                    components.append(TextComponent(type='text', data=text))
                     text = ""
-                components.append({'type': 'command', 'data': text_command})
+                components.append(TextComponent(type='command', data=text_command))
                 offset = text_command.end_offset
                 continue
 
@@ -122,32 +137,33 @@ class TXT2Section:
         
         #after parsing finished, create component and add to component list
         if len(text) > 0:
-            components.append({'type': 'text', 'data': text})
-            self.texts.append(components)
+            components.append(TextComponent(type='text', data=text))
+        self.texts.append(components)
 
     def __str__(self):
-        return (f"Offset Count: {self.offset_count}, Texts: {self.texts}, ")
+        return (f"""(magic: {self.magic}, offset_count: {self.offset_count}, 
+    texts: {formatList(self.texts)})""")
 
 class MSBTLabel:
     def __init__(self, value, length, str_index):
         self.data = value
         self.length = length
-        self.string_index = str_index.hex()
+        self.string_index = int.from_bytes(str_index, 'little')
 
     def __str__(self):
-        return (f"data: {self.data}, length: {self.length}, string_index: {self.string_index}")
+        return (f"(length: {self.length}, data: {self.data}, string_index: {self.string_index})")
     def __repr__(self): # this needs to be here for print to work if in a list 
         return self.__str__()
 
-#class TextComponent: | not used anymore
-#    def __init__(self, type, data):
-#        self.type = type
-#        self.data = data
-#
-#    def __str__(self):
-#        return (f"Type: {self.type}, Data: {str(self.data)}")
-#    def __repr__(self):
-#        return self.__str__()
+class TextComponent:
+    def __init__(self, data, type='text'):
+        self.type = type
+        self.data = data
+
+    def __str__(self):
+        return (f"(type: {self.type}, data: {str(self.data).replace('\n', '\\n')})")
+    def __repr__(self):
+        return self.__str__()
 
 class TextCommand:
     def __init__(self, msbt_data, start_offset):
@@ -173,7 +189,7 @@ class TextCommand:
         self.end_offset = offset # so the text parser would know the offset after the tag
 
     def __str__(self):
-        return (f"Type: {self.group}:{self.type}, Size: {self.data_size}, Data: {self.data})")
+        return (f"(type: {self.group}:{self.type}, data: {self.data})")
 
     def __repr__(self): # this needs to be here for print to work if in a list 
         return self.__str__()

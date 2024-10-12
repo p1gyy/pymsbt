@@ -10,22 +10,21 @@ pip install pymsbt
 ( Make sure to read the [wiki](https://github.com/p1gyy/pymsbt/wiki) for more information )
 ### Reading a msbt file
 ```python
-from pymsbt.msbt_read import MSBTFile
+from pymsbt.msbt import MSBTFile
 
 msbt = MSBTFile("./msbt/ActorMsg/Attachment.msbt")
 
-print(msbt.LBL1.labels)
-print(msbt.TXT2.texts)
-print(msbt.ATR1)
+print(msbt.text_labels['Item_Enemy_223_Adjective'])
 ```
 
-### Editing a msbt file (COMING SOON)
+### Editing a msbt file
 ```python
-from pymsbt.msbt_read import MSBTFile
+from pymsbt.msbt import MSBTFile
 from pymsbt.msbt_write import MSBTWriter
+from pymsbt.classes import TextComponent
 
 msbt = MSBTFile("./msbt/ActorMsg/Attachment.msbt")
-msbt.TXT2.texts[0][0]['data'] = 'test' # see the wiki for more information about the structure of text data
+msbt.set_text('Item_Enemy_223_Adjective', [TextComponent('test')]) # see the wiki for more information about the structure of text data
 
 write = MSBTWriter(msbt, "output.msbt")
 print("Wrote msbt file to", write.filepath)
