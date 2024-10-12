@@ -1,5 +1,5 @@
 import struct
-from pymsbt.classes import *
+from classes import *
 
 LITTLE_ENDIAN = 0xFFFE
 BIG_ENDIAN = 0xFEFF
