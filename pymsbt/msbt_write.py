@@ -1,19 +1,15 @@
 import struct
 
 class MSBTWriter:
-    def __init__(self, msbt_file, filepath):
+    def __init__(self, msbt_file, filepath=None):
         """
         Writes to a file in the MSBT format using the specified MSBTFile
 
             msbt_file: A MSBTFile instance
-            filepath: The path to write the ouput file to
+            filepath (optional): The path to write the ouput file to, defaults to the same filepath as the msbt file.
         """
-
-        #if sync_labels:
-        #    msbt_file.sync_labels_map()
-
         self.msbt = msbt_file
-        self.filepath = filepath
+        self.filepath = filepath or self.msbt.filepath
         self.stream = open(filepath, 'wb')
 
         self.label_index = 0
@@ -44,18 +40,39 @@ class MSBTWriter:
         self.stream.seek(0)
         self.stream.write(header)
 
-    def _fill_bytes(self, offset, next_offset):
-        """Fills a section of bytes with 0xAB, leaving a padding of 3 0x00 bytes"""
+    def _fill_bytes(self, offset, remainder):
+        """Fills a section of bytes with 0xAB to allign by 16 bytes, leaving a padding of 3 0x00 bytes"""
+
+        #calculate next offset to allign by 16
+        next_offset = offset
+        while True:
+            if next_offset % 16 == 0:
+                break
+            else:
+                next_offset += 1
+
         #fill with filler bytes until next section
         fill_length = next_offset - offset
         self.stream.seek(self.sec_offset)
-        for i in range(3):
+        padding = 0
+        for i in range(3 - remainder):
             # write padding of 3 0x00 bytes if they don't overlap onto the next section
-            if not (self.stream.tell() >= next_offset):
+            if not (self.stream.tell() > next_offset):
                 self.stream.write(b'\x00')
+                padding += 1
             else:
                 return # end early if they do overlap to the next section
-        self.stream.write(b'\xAB' * (fill_length - 3))
+        self.stream.write(b'\xAB' * (fill_length - padding))
+
+    def _calculate_table_size(self, sec_start_offset, end_offset):
+        table_size = (end_offset + 3) - (sec_start_offset + 16) # end offset + 3(padding) - section start offset + 16(header)
+        total_offset = sec_start_offset + 16 + table_size # total offset of entire file to end of section
+        byte_remainder = total_offset % 16  # must allign to 16 bytes, remainder amt of bytes that aren't alligned to 16.
+
+        if (byte_remainder <= 3):
+            return (table_size - byte_remainder), byte_remainder
+        else:
+            return (table_size), 0
 
     def _write_sections(self):
         """Writes the MSBT sections to the file"""
@@ -65,14 +82,11 @@ class MSBTWriter:
             table_size = section.table_size
             signature = section.signature
 
-            self._pack_into_stream("<4sI", offset, section.encoded_signature, table_size)
-
-            next_section_offset = offset + (table_size + 16 + (16 - (table_size % 16)) % 16)
+            self.next_section_offset = offset + (table_size + 16 + (16 - (table_size % 16)) % 16)
             if signature == "LBL1":
                 print("Writing Labels section...")
 
-                self._write_labels_section(offset, table_size)
-                self._fill_bytes(self.sec_offset, next_section_offset)
+                self._write_labels_section(offset)
             #elif signature == "ATR1":
             #    print("Writing Attributes section...")
             #
@@ -81,8 +95,7 @@ class MSBTWriter:
             elif signature == "TXT2":
                 print("Writing Text section...")
 
-                self._write_text_section(offset, table_size)
-                self._fill_bytes(self.sec_offset, next_section_offset)
+                self._write_text_section(offset)
             else:
                 print(f"Unknown section: {signature}")
 
@@ -91,11 +104,11 @@ class MSBTWriter:
                 self.stream.write(section.bytes)
 
             # Move to the next section (aligned to 16 bytes)
-            offset = next_section_offset
+            offset = self.next_section_offset
 
 
     # LABELS
-    def _write_labels_section(self, section_offset, table_size):
+    def _write_labels_section(self, section_offset):
         """Writes the MSBT LBL1 section to the file"""
         # Section starts after the 16-byte header
         offset = section_offset + 16
@@ -113,6 +126,12 @@ class MSBTWriter:
             #print(f"Wrote Label {i}: StringCount={str_count}, StringOffset={str_offset}")
 
             self.sec_offset = self._write_label_string(section_offset + 16 + str_offset, str_count)
+
+        #calculate table size and create header
+        table_size, r = self._calculate_table_size(section_offset, self.sec_offset)
+        self._pack_into_stream("<4sI", section_offset, b'LBL1', table_size)
+
+        self._fill_bytes(self.sec_offset, r)
 
     def _write_label_string(self, label_offset, string_count):
         """Writes the LBL1 label strings to the file"""
@@ -138,26 +157,39 @@ class MSBTWriter:
     
 
     ## TEXT
-    def _write_text_section(self, section_offset, table_size):
+    def _write_text_section(self, section_offset):
         """Writes the MSBT TXT2 section to the file"""
+        offset = section_offset + 20 # skip past header and to-be-written offset count
+        offset_count = self.msbt.TXT2.offset_count
+        txt_offsets = []
+
+        offset += 4 * offset_count
+        for i in range(offset_count):
+            txt_offsets.append(offset - 240) # for some reason this works...
+            self._write_text_string(offset, i)
+            offset = self.sec_offset + 2
+
+        #after finished writing texts, create offsets
         offset = section_offset + 16 # skip section header
 
-        self._pack_into_stream("<I", offset, self.msbt.TXT2.offset_count)
+        self._pack_into_stream("<I", offset, offset_count)
         offset += 4
-        
-        # read each string in the text section
-        for i in range(self.msbt.TXT2.offset_count):
-            text_offset = self.msbt.TXT2.offset_table[i]
+
+        # write each string in the text section
+        for i in range(offset_count):
+            text_offset = txt_offsets[i]
             self._pack_into_stream("<I", offset, text_offset)
             offset += 4
-            self._write_text_string(section_offset + 16 + text_offset, i)
+
+        #calculate table size and create header
+        table_size, r = self._calculate_table_size(section_offset, self.sec_offset)
+        self._pack_into_stream("<4sI", section_offset, b'TXT2', table_size)
+
+        self._fill_bytes(self.sec_offset, r)
 
     def _write_text_string(self, text_offset, index):
         """Writes the TXT2 text strings to the file, writing text commands if necessary"""
-        try:
-            components = self.msbt.TXT2.texts[index]
-        except IndexError:
-            return # idk why this happens i'm too lazy to fix it.
+        components = self.msbt.TXT2.texts[index]
         offset = text_offset
         for component in components:
 

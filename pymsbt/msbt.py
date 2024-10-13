@@ -91,14 +91,6 @@ class MSBTFile:
     #        self.attributes.append(attr_offset)
     #        offset += 4
 
-    #def sync_labels_map(self):
-    #    """Syncronizes the text_labels map object to LBL1.labels and TXT2.texts. Ran automatically upon creation of a MSBTWriter class"""
-    #    texts = []
-    #    for label, text in self.text_labels.items():
-    #        texts.append(text)
-    #    
-    #    self.TXT2.texts = texts
-
     def get_text_index(self, lbl):
         """Returns a index in TXT2.texts that corresponds to the label"""
         label_obj = None
