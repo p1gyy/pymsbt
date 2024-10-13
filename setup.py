@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pymsbt',
-    version='1.0.11',
+    version='1.0.2',
     author='Piggy Gaming',
     description='A python library for parsing and editing .msbt binary files',
     long_description=open('README.md').read(),
