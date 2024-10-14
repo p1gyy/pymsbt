@@ -10,7 +10,7 @@ class MSBTWriter:
         """
         self.msbt = msbt_file
         self.filepath = filepath or self.msbt.filepath
-        self.stream = open(filepath, 'wb')
+        self.stream = open(self.filepath, 'wb')
 
         self.label_index = 0
         self.sec_offset = 0
@@ -71,8 +71,11 @@ class MSBTWriter:
 
         if (byte_remainder <= 3):
             return (table_size - byte_remainder), byte_remainder
+        elif (byte_remainder >= 13):
+            byte_remainder_sub = (16 - byte_remainder)
+            return (table_size) - byte_remainder_sub, 0
         else:
-            return (table_size), 0
+            return table_size, 0
 
     def _write_sections(self):
         """Writes the MSBT sections to the file"""
@@ -163,9 +166,9 @@ class MSBTWriter:
         offset_count = self.msbt.TXT2.offset_count
         txt_offsets = []
 
-        offset += 4 * offset_count
+        offset += 4 * offset_count # move past offsets to write texts
         for i in range(offset_count):
-            txt_offsets.append(offset - 240) # for some reason this works...
+            txt_offsets.append(offset - (section_offset + 16))
             self._write_text_string(offset, i)
             offset = self.sec_offset + 2
 
@@ -175,6 +178,9 @@ class MSBTWriter:
         self._pack_into_stream("<I", offset, offset_count)
         offset += 4
 
+        print(self.msbt.TXT2.offset_table)
+        print(txt_offsets)
+
         # write each string in the text section
         for i in range(offset_count):
             text_offset = txt_offsets[i]
@@ -183,6 +189,7 @@ class MSBTWriter:
 
         #calculate table size and create header
         table_size, r = self._calculate_table_size(section_offset, self.sec_offset)
+        print(table_size, r)
         self._pack_into_stream("<4sI", section_offset, b'TXT2', table_size)
 
         self._fill_bytes(self.sec_offset, r)
